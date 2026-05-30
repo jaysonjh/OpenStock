@@ -67,7 +67,41 @@ pnpm test:db              # node scripts/test-db.mjs — requires MONGODB_URI in
 | `lib/better-auth/` | `auth.ts` — Better Auth singleton |
 | `lib/nodemailer/` | Transporter, templates, reset-password email |
 | `types/global.d.ts` | Global type declarations (no import needed) |
+| `lib/providers/` | Provider extension system — pluggable data source architecture (NEW) |
 | `scripts/` | Utility scripts (test-db, kit migration, etc.) |
+
+## Provider Extension Architecture
+
+OpenStock uses a pluggable Provider pattern for data sources. All new code lives under `lib/providers/` — **zero** modifications to existing source files.
+
+```ts
+import { getMarketProvider, getMarketProviderForSymbol }
+  from '@/lib/providers';
+
+const provider = getMarketProvider(); // env-driven: finnhub|tushare|stock-sdk
+const quote = await provider.getQuote('AAPL');
+```
+
+**Three independent interfaces** (each in `lib/providers/core/types.ts`):
+- `MarketDataProvider` — stock quotes, company profiles, search, news, watchlist data
+- `SentimentProvider` — cross-source sentiment snapshots
+- `TradingCalendarProvider` — is-trading-day, next/prev trading day, market hours
+
+**Provider selection** via env vars:
+- `MARKET_DATA_PROVIDER=finnhub|tushare|stock-sdk` (default `finnhub`)
+- `SENTIMENT_PROVIDER=adanos` (default)
+- `CALENDAR_PROVIDER=us|ashare` (default `us`)
+
+**Multi-market auto-routing**: `getMarketProviderForSymbol('600519.SH')` → Tushare, `getMarketProviderForSymbol('AAPL')` → Finnhub.
+
+**Adding a new Provider** (3 files, 0 modifications elsewhere):
+1. Implement the interface in `lib/providers/<domain>/<name>/provider.ts`
+2. Create `index.ts` calling `registerXxxProvider('<name>', factory)`
+3. Add conditional import in `lib/providers/core/index.ts` (if optional)
+
+**Existing Adapters** (wrap upstream code without modifying it):
+- `FinnhubAdapter` → wraps `@/lib/actions/finnhub.actions`
+- `AdanosAdapter` → wraps `@/lib/actions/adanos.actions`
 
 ## Gotchas
 
